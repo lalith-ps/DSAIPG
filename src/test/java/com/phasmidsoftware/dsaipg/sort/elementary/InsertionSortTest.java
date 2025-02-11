@@ -5,15 +5,14 @@
 package com.phasmidsoftware.dsaipg.sort.elementary;
 
 import com.phasmidsoftware.dsaipg.sort.*;
-import com.phasmidsoftware.dsaipg.util.Config;
-import com.phasmidsoftware.dsaipg.util.LazyLogger;
-import com.phasmidsoftware.dsaipg.util.PrivateMethodTester;
-import com.phasmidsoftware.dsaipg.util.StatPack;
+import com.phasmidsoftware.dsaipg.util.*;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+import java.util.function.Supplier;
 
 import static com.phasmidsoftware.dsaipg.sort.Instrument.*;
 import static com.phasmidsoftware.dsaipg.util.ConfigTest.INVERSIONS;
@@ -266,5 +265,61 @@ public class InsertionSortTest {
     }
 
     final static LazyLogger logger = new LazyLogger(InsertionSort.class);
+
+    @Test
+    public void testSortPerformance() {
+        int[] inputSizes = {250, 500, 1000, 2000, 4000};
+        String[] orderTypes = {"random", "ordered", "partially-ordered", "reverse-ordered"};
+        final Config sortingConfig = setupConfig("true", "true", "0", "1", "", "");
+
+        for (int size : inputSizes) {
+            System.out.println("Benchmark for input size = " + size);
+            for (String orderType : orderTypes) {
+                Supplier<Integer[]> arrayGenerator = () -> generateArray(size, orderType);
+                InsertionSort<Integer> insertionSort = new InsertionSort<>("Insertion Sort", size, 20, sortingConfig);
+                Benchmark_Timer<Integer[]> benchmarkTimer = new Benchmark_Timer<>("Sorting Benchmark", insertionSort::sort);
+
+                // Warmup phase
+                new Timer().repeat(10, true, arrayGenerator, insertionSort::sort, null, null);
+                // Measure execution time
+                double averageExecutionTime = benchmarkTimer.runFromSupplier(arrayGenerator, 20);
+                System.out.println("Order Type: " + orderType + ", Average Execution Time: " + averageExecutionTime + " milliseconds");
+            }
+            System.out.println();
+        }
+    }
+
+    private static Integer[] generateArray(int size, String orderType) {
+        Integer[] array = new Integer[size];
+        Random randomGenerator = new Random();
+
+        switch (orderType) {
+            case "random":
+                for (int i = 0; i < size; i++) {
+                    array[i] = randomGenerator.nextInt();
+                }
+                break;
+            case "ordered":
+                for (int i = 0; i < size; i++) {
+                    array[i] = i;
+                }
+                break;
+            case "partially-ordered":
+                for (int i = 0; i < size; i++) {
+                    array[i] = i + randomGenerator.nextInt(100);
+                }
+                break;
+            case "reverse-ordered":
+                for (int i = 0; i < size; i++) {
+                    array[i] = size - i;
+                }
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid order type");
+        }
+
+        return array;
+    }
+
 
 }
