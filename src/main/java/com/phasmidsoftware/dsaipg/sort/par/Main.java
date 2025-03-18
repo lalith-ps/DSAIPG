@@ -1,66 +1,84 @@
-/*
- * Copyright (c) 2024. Robin Hillyard
- */
-
 package com.phasmidsoftware.dsaipg.sort.par;
 
 import java.io.BufferedWriter;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 
-/**
- * This code has been fleshed out by Ziyao Qiao. Thanks very much.
- * CONSIDER tidy it up a bit.
- */
 public class Main {
 
     public static void main(String[] args) {
         processArgs(args);
-        System.out.println("Degree of parallelism: " + ForkJoinPool.getCommonPoolParallelism());
+
+        // Experiment parameters
+        int[] arraySizes = {2000000, 4000000, 8000000};
+        double[] percentageValues = {0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45,
+                0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95};
+        int[] threadCounts = {2, 4, 8, 16};
+        int numberOfRuns = 5;
+
         Random random = new Random();
-        int[] array = new int[2000000];
-        ArrayList<Long> timeList = new ArrayList<>();
-        for (int j = 50; j < 100; j++) {
-            ParSort.cutoff = 10000 * (j + 1);
-            // for (int i = 0; i < array.length; i++) array[i] = random.nextInt(10000000);
-            long time;
-            long startTime = System.currentTimeMillis();
-            for (int t = 0; t < 10; t++) {
-                for (int i = 0; i < array.length; i++) array[i] = random.nextInt(10000000);
-                ParSort.sort(array, 0, array.length);
+        ArrayList<String> resultLines = new ArrayList<>();
+        resultLines.add("ArraySize,Cutoff,ThreadCount,AverageTime(ms)");
+
+        for (int arraySize : arraySizes) {
+            System.out.println("\nTesting Array Size: " + arraySize);
+
+            int[] cutoffValues = new int[percentageValues.length];
+            for (int i = 0; i < percentageValues.length; i++) {
+                cutoffValues[i] = (int) (arraySize * percentageValues[i]);
             }
-            long endTime = System.currentTimeMillis();
-            time = (endTime - startTime);
-            timeList.add(time);
 
+            int[] array = new int[arraySize];
 
-            System.out.println("cutoff：" + (ParSort.cutoff) + "\t\t10times Time:" + time + "ms");
+            for (int threadCount : threadCounts) {
+                ForkJoinPool pool = new ForkJoinPool(threadCount);
+                ParSort.setPool(pool); // <-- Set pool once per thread count
+                System.out.println("  Thread Count: " + threadCount);
 
+                for (int cutoff : cutoffValues) {
+                    ParSort.cutoff = cutoff;
+                    long totalTime = 0;
+
+                    for (int t = 0; t < numberOfRuns; t++) {
+                        for (int i = 0; i < array.length; i++) {
+                            array[i] = random.nextInt(10000000);
+                        }
+
+                        long startTime = System.currentTimeMillis();
+                        ParSort.sort(array, 0, array.length); // No need to pass pool
+                        long endTime = System.currentTimeMillis();
+                        totalTime += (endTime - startTime);
+                    }
+
+                    long avgTime = totalTime / numberOfRuns;
+                    System.out.println("    Cutoff: " + cutoff + ", Avg Time: " + avgTime + " ms");
+                    resultLines.add(arraySize + "," + cutoff + "," + threadCount + "," + avgTime);
+                }
+                pool.shutdown();
+            }
         }
+
+        // Write results
         try {
-            FileOutputStream fis = new FileOutputStream("./src/result.csv");
+            FileOutputStream fis = new FileOutputStream("./src/dynamic_result.csv");
             OutputStreamWriter isr = new OutputStreamWriter(fis);
             BufferedWriter bw = new BufferedWriter(isr);
-            int j = 0;
-            for (long i : timeList) {
-                String content = (double) 10000 * (j + 1) / 2000000 + "," + (double) i / 10 + "\n";
-                j++;
-                bw.write(content);
-                bw.flush();
+            for (String line : resultLines) {
+                bw.write(line);
+                bw.newLine();
             }
+            bw.flush();
             bw.close();
-
+            System.out.println("\nAll results written to dynamic_result.csv");
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
+    // Args processing (unchanged)
     private static void processArgs(String[] args) {
         String[] xs = args;
         while (xs.length > 0)
@@ -76,18 +94,12 @@ public class Main {
 
     private static void processCommand(String x, String y) {
         if (x.equalsIgnoreCase("N")) setConfig(x, Integer.parseInt(y));
-        else
-            // TODO sort this out
-            if (x.equalsIgnoreCase("P")) //noinspection ResultOfMethodCallIgnored
-                ForkJoinPool.getCommonPoolParallelism();
+        else if (x.equalsIgnoreCase("P")) ForkJoinPool.getCommonPoolParallelism();
     }
 
     private static void setConfig(String x, int i) {
         configuration.put(x, i);
     }
 
-    @SuppressWarnings("MismatchedQueryAndUpdateOfCollection")
     private static final Map<String, Integer> configuration = new HashMap<>();
-
-
 }

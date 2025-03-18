@@ -1,19 +1,14 @@
-/*
- * Copyright (c) 2024. Robin Hillyard
- */
-
 package com.phasmidsoftware.dsaipg.sort.par;
 
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * ParSort is a class implementing a parallel sorting algorithm.
  * The sorting is executed using a fork-and-join approach,
  * where large arrays are divided into smaller portions and sorted concurrently.
  * Designed to optimize performance for sorting large integer arrays.
- * This code has been fleshed out by...
- * @author Ziyao Qiao. Thanks very much.
  */
 final class ParSort {
 
@@ -22,10 +17,23 @@ final class ParSort {
      * to single-threaded sorting. If the size of the range to be sorted is smaller than
      * this value, {@link Arrays#sort} is used for single-threaded sorting. Otherwise,
      * the range is divided into smaller subarrays, which are sorted in parallel.
-     * A larger cutoff value reduces the overhead of thread management but may limit
-     * the advantages of parallelism.
      */
     public static int cutoff = 1000;
+
+    /**
+     * Static ForkJoinPool instance used to control parallelism.
+     * It can be configured externally before sorting.
+     */
+    private static ForkJoinPool pool = ForkJoinPool.commonPool();
+
+    /**
+     * Configures a custom ForkJoinPool for the sorting operations.
+     *
+     * @param customPool the ForkJoinPool to be used
+     */
+    public static void setPool(ForkJoinPool customPool) {
+        pool = customPool;
+    }
 
     /**
      * Sorts the specified portion of the input array using a parallel sorting algorithm.
@@ -39,16 +47,28 @@ final class ParSort {
      * @param to    the ending index (exclusive) of the portion of the array to be sorted
      */
     public static void sort(int[] array, int from, int to) {
+        sortInPlace(array, from, to);
+    }
+
+    /**
+     * Internal in-place recursive sort method utilizing ForkJoinPool.
+     * Modifies the input array directly.
+     *
+     * @param array the array to be sorted
+     * @param from  the starting index (inclusive)
+     * @param to    the ending index (exclusive)
+     */
+    private static void sortInPlace(int[] array, int from, int to) {
         if (to - from >= cutoff) {
-            CompletableFuture<int[]> completableFuture1 = null;
-            CompletableFuture<int[]> completableFuture2 = null;
-            // TO BE IMPLEMENTED 
-            // END SOLUTION
-            CompletableFuture<int[]> completableFuture = completableFuture1.thenCombine(completableFuture2, ParSort::doMerge);
-            completableFuture.whenComplete((result, throwable) -> System.arraycopy(result, 0, array, from, result.length));
-            completableFuture.join();
-        } else
+            int mid = from + (to - from) / 2;
+            CompletableFuture<int[]> leftFuture = asyncSort(array, from, mid);
+            CompletableFuture<int[]> rightFuture = asyncSort(array, mid, to);
+            CompletableFuture<int[]> combined = leftFuture.thenCombine(rightFuture, ParSort::doMerge);
+            combined.whenComplete((result, throwable) -> System.arraycopy(result, 0, array, from, result.length));
+            combined.join();
+        } else {
             Arrays.sort(array, from, to);
+        }
     }
 
     /**
@@ -62,17 +82,21 @@ final class ParSort {
      * @return a new sorted array containing the elements from the specified range of the input array
      */
     static int[] sortRecursive(int[] array, int from, int to) {
-        int[] result = new int[to - from];
-        // TO BE IMPLEMENTED 
-         // NOTE you need to do something here so that result is the sorted version of array.
-        // END SOLUTION
+        int[] result;
+        if (to - from >= cutoff) {
+            int mid = from + (to - from) / 2;
+            int[] left = sortRecursive(array, from, mid);
+            int[] right = sortRecursive(array, mid, to);
+            result = doMerge(left, right);
+        } else {
+            result = Arrays.copyOfRange(array, from, to);
+            Arrays.sort(result);
+        }
         return result;
     }
 
     /**
      * Merges two sorted arrays into a single sorted array.
-     * The method assumes that both input arrays are already sorted in ascending order,
-     * and combines them into a new sorted array.
      *
      * @param xs1 the first sorted input array
      * @param xs2 the second sorted input array
@@ -80,8 +104,7 @@ final class ParSort {
      */
     static int[] doMerge(int[] xs1, int[] xs2) {
         int[] result = new int[xs1.length + xs2.length];
-        int i = 0;
-        int j = 0;
+        int i = 0, j = 0;
         for (int k = 0; k < result.length; k++) {
             if (i >= xs1.length) result[k] = xs2[j++];
             else if (j >= xs2.length) result[k] = xs1[i++];
@@ -102,8 +125,6 @@ final class ParSort {
      * @return a CompletableFuture containing the sorted section of the array
      */
     static CompletableFuture<int[]> asyncSort(int[] array, int from, int to) {
-        return CompletableFuture.supplyAsync(
-                () -> sortRecursive(array, from, to)
-        );
+        return CompletableFuture.supplyAsync(() -> sortRecursive(array, from, to), pool);
     }
 }
