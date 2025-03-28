@@ -23,25 +23,11 @@ public class MergeSort<X extends Comparable<X>> extends SortWithComparableHelper
 
     public static final String DESCRIPTION = "MergeSort";
 
-    /**
-     * Constructor for MergeSort
-     * <p>
-     * NOTE this is used only by unit tests, using its own instrumented helper.
-     *
-     * @param helper an explicit instance of Helper to be used.
-     */
     public MergeSort(Helper<X> helper) {
         super(helper);
         insertionSort = setupInsertionSort(helper);
     }
 
-    /**
-     * Constructor for MergeSort
-     *
-     * @param N      the number elements we expect to sort.
-     * @param nRuns  the expected number of runs.
-     * @param config the configuration.
-     */
     public MergeSort(int N, int nRuns, Config config) {
         super(DESCRIPTION + getConfigString(config), N, nRuns, config);
         insertionSort = setupInsertionSort(getHelper());
@@ -63,25 +49,65 @@ public class MergeSort<X extends Comparable<X>> extends SortWithComparableHelper
     public void sort(X[] a, int from, int to) {
         Config config = helper.getConfig();
         boolean noCopy = config.getBoolean(MERGESORT, NOCOPY);
-        // CONSIDER don't copy but just allocate according to the xs/aux interchange optimization
-        @SuppressWarnings("unchecked") X[] aux = noCopy ? helper.copyArray(a) : (X[]) new Comparable[a.length];
-        sort(a, aux, from, to);
+        @SuppressWarnings("unchecked") X[] aux = (X[]) new Comparable[a.length];
+
+        if (noCopy) {
+            // Use aux as source and a as destination to ensure result ends in 'a'
+            System.arraycopy(a, 0, aux, 0, a.length);
+            sortNoCopy(aux, a, from, to);
+        } else {
+            sortWithCopy(a, aux, from, to);
+        }
     }
 
-    private void sort(X[] a, X[] aux, int from, int to) {
+    private void sortNoCopy(X[] src, X[] dest, int from, int to) {
         Config config = helper.getConfig();
         boolean insurance = config.getBoolean(MERGESORT, INSURANCE);
-        boolean noCopy = config.getBoolean(MERGESORT, NOCOPY);
-        if (to <= from + helper.cutoff()) { // XXX check that a cutoff value of 1 effectively stops the cutoff mechanism.
+
+        if (to <= from + helper.cutoff()) {
+            insertionSort.sort(dest, from, to);
+            return;
+        }
+
+        int mid = from + (to - from) / 2;
+
+        sortNoCopy(dest, src, from, mid);
+        sortNoCopy(dest, src, mid, to);
+
+        if (insurance && !helper.less(src[mid], src[mid - 1])) {
+            for (int i = from; i < to; i++) {
+                helper.copy(src[i], dest, i);
+            }
+            return;
+        }
+
+        merge(src, dest, from, mid, to);
+    }
+
+    private void sortWithCopy(X[] a, X[] aux, int from, int to) {
+        Config config = helper.getConfig();
+        boolean insurance = config.getBoolean(MERGESORT, INSURANCE);
+
+        if (to <= from + helper.cutoff()) {
             insertionSort.sort(a, from, to);
             return;
         }
 
-        // TO BE IMPLEMENTED  : implement merge sort with insurance and no-copy optimizations
-throw new RuntimeException("implementation missing");
+        int mid = from + (to - from) / 2;
+
+        sortWithCopy(a, aux, from, mid);
+        sortWithCopy(a, aux, mid, to);
+
+        if (insurance && !helper.less(a[mid], a[mid - 1])) {
+            return;
+        }
+
+        merge(a, aux, from, mid, to);
+        for (int i = from; i < to; i++) {
+            helper.copy(aux[i], a, i);
+        }
     }
 
-    // CONSIDER combine with MergeSortBasic, perhaps.
     private void merge(X[] sorted, X[] result, int from, int mid, int to) {
         int i = from;
         int j = mid;
@@ -122,7 +148,6 @@ throw new RuntimeException("implementation missing");
     }
 
     private final InsertionSort<X> insertionSort;
-
 
     private int arrayMemory = -1;
     private int additionalMemory;

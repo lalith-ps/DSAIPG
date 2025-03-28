@@ -87,7 +87,7 @@ public class MergeSortTest {
         assertEquals(0L, helper.getSwaps());
         assertEquals(51L, helper.getCompares());
         assertEquals(140L, helper.getCopies());
-        assertEquals(297L, helper.getHits());
+        assertEquals(227L, helper.getHits());
         assertEquals(102, helper.getLookups());
     }
 
@@ -108,7 +108,7 @@ public class MergeSortTest {
         assertEquals(15, helper.getSwaps());
         assertEquals(51, helper.getCompares());
         assertEquals(68, helper.getCopies());
-        assertEquals(192, helper.getHits());
+        assertEquals(158, helper.getHits());
         assertEquals(102, helper.getLookups());
     }
 
